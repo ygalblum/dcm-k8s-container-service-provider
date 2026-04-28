@@ -10,7 +10,6 @@ import (
 	v1alpha1 "github.com/dcm-project/k8s-container-service-provider/api/v1alpha1"
 	"github.com/dcm-project/k8s-container-service-provider/internal/store"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("K8s Store", func() {
@@ -25,7 +24,7 @@ var _ = Describe("K8s Store", func() {
 			Expect(result).NotTo(BeNil())
 
 			// Verify Deployment was created with replicas=1
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*deploy.Spec.Replicas).To(Equal(int32(1)))
 
@@ -43,7 +42,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "abc-123")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 
 			expectedLabels := map[string]string{
@@ -67,7 +66,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-011")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(deploy.Spec.Template.Spec.Containers[0].Image).To(Equal("quay.io/myapp:v1.2"))
@@ -82,7 +81,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-012")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			container := deploy.Spec.Template.Spec.Containers[0]
 			Expect(container.Resources.Requests.Cpu().String()).To(Equal("1"))
@@ -98,7 +97,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-013")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			container := deploy.Spec.Template.Spec.Containers[0]
 			Expect(container.Resources.Requests.Memory().String()).To(Equal("1Gi"))
@@ -117,7 +116,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-014")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deploy.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"/app/start"}))
 		})
@@ -134,7 +133,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-015")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deploy.Spec.Template.Spec.Containers[0].Args).To(Equal([]string{"--config", "/etc/config.yaml"}))
 		})
@@ -154,7 +153,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-016")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			containerEnv := deploy.Spec.Template.Spec.Containers[0].Env
 			Expect(containerEnv).To(ContainElements(
@@ -171,7 +170,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-017")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			containerPorts := deploy.Spec.Template.Spec.Containers[0].Ports
 			Expect(containerPorts).To(ContainElements(
@@ -188,7 +187,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-018")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			container := deploy.Spec.Template.Spec.Containers[0]
 			Expect(container.Command).To(BeEmpty())
@@ -223,7 +222,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-070")
 			Expect(err).NotTo(HaveOccurred())
 
-			deploy, err := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 
 			// User labels present

@@ -22,25 +22,24 @@ import (
 
 var _ = Describe("K8s Store", func() {
 	Describe("Conflict & Namespace", func() {
-		// TC-I028: Create returns conflict when Deployment name already exists
-		It("returns conflict when Deployment name already exists (TC-I028)", func() {
+		// TC-I028: GenerateName allows same metadata name with different IDs
+		It("allows same metadata name with different instance IDs (TC-I028)", func() {
 			s, client := newTestStore(defaultConfig())
 
 			// Pre-create a Deployment with name "web-app"
 			err := createFakeDeployment(client, "web-app", "original-id")
 			Expect(err).NotTo(HaveOccurred())
 
-			// Attempt to create with the same name but different ID
+			// Create with the same metadata name but different ID — succeeds
+			// because GenerateName produces a unique Deployment name.
 			c := minimalContainer("web-app")
 			_, err = s.Create(context.Background(), c, "different-id")
+			Expect(err).NotTo(HaveOccurred())
 
-			var conflictErr *store.ConflictError
-			Expect(errors.As(err, &conflictErr)).To(BeTrue(), "expected ConflictError, got: %v", err)
-
-			// Verify existing Deployment is not modified
-			deploy, getErr := client.AppsV1().Deployments("default").Get(context.Background(), "web-app", metav1.GetOptions{})
-			Expect(getErr).NotTo(HaveOccurred())
-			Expect(deploy.Labels["dcm.project/dcm-instance-id"]).To(Equal("original-id"))
+			// Verify both Deployments exist
+			deployList, listErr := client.AppsV1().Deployments("default").List(context.Background(), metav1.ListOptions{})
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(deployList.Items).To(HaveLen(2))
 		})
 
 		// TC-I029: All resources created in the configured namespace
@@ -56,12 +55,12 @@ var _ = Describe("K8s Store", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify Deployment is in "production" namespace
-			deploy, err := client.AppsV1().Deployments("production").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, err := getCreatedDeployment(client, "production")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deploy.Namespace).To(Equal("production"))
 
 			// Verify Service is in "production" namespace
-			svc, err := client.CoreV1().Services("production").Get(context.Background(), "my-app", metav1.GetOptions{})
+			svc, err := getCreatedService(client, "production")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(svc.Namespace).To(Equal("production"))
 		})

@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -17,12 +16,19 @@ func (s *K8sContainerStore) Delete(ctx context.Context, containerID string) erro
 
 	propagation := metav1.DeletePropagationBackground
 
-	// 2. Delete Service first (dependent resource, ignore not-found).
-	err = s.client.CoreV1().Services(s.cfg.Namespace).Delete(ctx, deploy.Name, metav1.DeleteOptions{
-		PropagationPolicy: &propagation,
+	// 2. Delete Service first (dependent resource, ignore if none found).
+	svcs, err := s.client.CoreV1().Services(s.cfg.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: instanceSelector(containerID),
 	})
-	if err != nil && !apierrors.IsNotFound(err) {
+	if err != nil {
 		return err
+	}
+	for i := range svcs.Items {
+		if delErr := s.client.CoreV1().Services(s.cfg.Namespace).Delete(ctx, svcs.Items[i].Name, metav1.DeleteOptions{
+			PropagationPolicy: &propagation,
+		}); delErr != nil {
+			return delErr
+		}
 	}
 
 	// 3. Delete Deployment (primary resource).

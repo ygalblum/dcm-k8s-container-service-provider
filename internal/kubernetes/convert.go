@@ -308,9 +308,9 @@ func buildDeployment(spec v1alpha1.ContainerSpec, id string, cfg K8sConfig, labe
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.Metadata.Name,
-			Namespace: cfg.Namespace,
-			Labels:    labels,
+			GenerateName: spec.Metadata.Name + "-",
+			Namespace:    cfg.Namespace,
+			Labels:       labels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -347,9 +347,9 @@ func buildService(spec v1alpha1.ContainerSpec, id string, cfg K8sConfig, labels 
 
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.Metadata.Name,
-			Namespace: cfg.Namespace,
-			Labels:    labels,
+			GenerateName: spec.Metadata.Name + "-",
+			Namespace:    cfg.Namespace,
+			Labels:       labels,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     svcType,

@@ -20,8 +20,8 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-019")
 			Expect(err).NotTo(HaveOccurred())
 
-			svc, err := client.CoreV1().Services("default").Get(context.Background(), "my-app", metav1.GetOptions{})
-			Expect(err).NotTo(HaveOccurred())
+			svc, svcErr := getCreatedService(client, "default")
+			Expect(svcErr).NotTo(HaveOccurred())
 			Expect(svc.Spec.Ports).To(HaveLen(1))
 			Expect(svc.Spec.Ports[0].Port).To(Equal(int32(8080)))
 			Expect(string(svc.Spec.Type)).To(Equal("ClusterIP"))
@@ -49,7 +49,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-090")
 			Expect(err).NotTo(HaveOccurred())
 
-			svc, err := client.CoreV1().Services("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			svc, err := getCreatedService(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(svc.Spec.Ports).To(HaveLen(3))
 			Expect(svc.Spec.Ports[0].Name).To(Equal("port-8080"))
@@ -65,7 +65,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-023")
 			Expect(err).NotTo(HaveOccurred())
 
-			svc, err := client.CoreV1().Services("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			svc, err := getCreatedService(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(svc.Spec.Type)).To(Equal("ClusterIP"))
 		})
@@ -80,7 +80,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-024")
 			Expect(err).NotTo(HaveOccurred())
 
-			svc, err := client.CoreV1().Services("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			svc, err := getCreatedService(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(svc.Spec.Type)).To(Equal("LoadBalancer"))
 		})
@@ -111,7 +111,7 @@ var _ = Describe("K8s Store", func() {
 			Expect(svcs.Items).To(BeEmpty())
 
 			// Verify Deployment was still created
-			_, deployErr := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			_, deployErr := getCreatedDeployment(client, "default")
 			Expect(deployErr).NotTo(HaveOccurred())
 		})
 
@@ -123,7 +123,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "abc-123")
 			Expect(err).NotTo(HaveOccurred())
 
-			svc, err := client.CoreV1().Services("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			svc, err := getCreatedService(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(svc.Labels).To(HaveKeyWithValue("dcm.project/managed-by", "dcm"))
@@ -141,7 +141,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-074")
 			Expect(err).NotTo(HaveOccurred())
 
-			svc, err := client.CoreV1().Services("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			svc, err := getCreatedService(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(svc.Spec.Type)).To(Equal("NodePort"))
 		})
@@ -159,7 +159,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-091")
 			Expect(err).NotTo(HaveOccurred())
 
-			svc, err := client.CoreV1().Services("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			svc, err := getCreatedService(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(svc.Spec.Ports).To(HaveLen(1))
 			Expect(svc.Spec.Ports[0].Port).To(Equal(int32(8080)))
@@ -180,7 +180,7 @@ var _ = Describe("K8s Store", func() {
 			_, err := s.Create(context.Background(), c, "test-id-092")
 			Expect(err).NotTo(HaveOccurred())
 
-			svc, err := client.CoreV1().Services("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			svc, err := getCreatedService(client, "default")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(svc.Spec.Type)).To(Equal("LoadBalancer"))
 			Expect(svc.Spec.Ports).To(HaveLen(2))
@@ -261,7 +261,7 @@ var _ = Describe("K8s Store", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Deployment must be created
-			_, deployErr := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			_, deployErr := getCreatedDeployment(client, "default")
 			Expect(deployErr).NotTo(HaveOccurred())
 
 			// No Service should exist
@@ -281,13 +281,13 @@ var _ = Describe("K8s Store", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Deployment should be created normally
-			deploy, deployErr := client.AppsV1().Deployments("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			deploy, deployErr := getCreatedDeployment(client, "default")
 			Expect(deployErr).NotTo(HaveOccurred())
 			Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(deploy.Spec.Template.Spec.Containers[0].Image).To(Equal("nginx:latest"))
 
 			// Service should be created normally
-			svc, svcErr := client.CoreV1().Services("default").Get(context.Background(), "my-app", metav1.GetOptions{})
+			svc, svcErr := getCreatedService(client, "default")
 			Expect(svcErr).NotTo(HaveOccurred())
 			Expect(svc.Spec.Ports).To(HaveLen(1))
 		})

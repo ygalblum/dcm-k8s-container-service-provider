@@ -70,7 +70,7 @@ func (s *K8sContainerStore) Create(ctx context.Context, spec v1alpha1.ContainerS
 
 	// Create Deployment.
 	deploy := buildDeployment(spec, id, s.cfg, labels)
-	_, err = s.client.AppsV1().Deployments(s.cfg.Namespace).Create(ctx, deploy, metav1.CreateOptions{})
+	deploy, err = s.client.AppsV1().Deployments(s.cfg.Namespace).Create(ctx, deploy, metav1.CreateOptions{})
 	if err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			return nil, &store.ConflictError{Message: fmt.Sprintf("deployment %q already exists", spec.Metadata.Name)}

@@ -10,7 +10,6 @@ import (
 	"github.com/dcm-project/k8s-container-service-provider/internal/store"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -94,13 +93,14 @@ func (s *K8sContainerStore) enrichFromCluster(
 		}
 	}
 
-	svc, err := s.client.CoreV1().Services(s.cfg.Namespace).Get(ctx, deploy.Name, metav1.GetOptions{})
+	svcs, err := s.client.CoreV1().Services(s.cfg.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: instanceSelector(instanceID),
+	})
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return err
-		}
-	} else {
-		enrichWithService(c, svc)
+		return err
+	}
+	if len(svcs.Items) == 1 {
+		enrichWithService(c, &svcs.Items[0])
 	}
 
 	return nil

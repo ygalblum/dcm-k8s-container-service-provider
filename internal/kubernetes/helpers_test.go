@@ -2,6 +2,7 @@ package kubernetes_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"time"
@@ -170,6 +171,32 @@ func createFakePod(client kubernetes.Interface, name, instanceID string, phase c
 	}
 	_, err := client.CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
 	return err
+}
+
+// getCreatedDeployment lists Deployments in the given namespace and returns the first one.
+// Use this after s.Create() because GenerateName means the fake client won't assign a fixed name.
+func getCreatedDeployment(client kubernetes.Interface, namespace string) (*appsv1.Deployment, error) {
+	list, err := client.AppsV1().Deployments(namespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if len(list.Items) == 0 {
+		return nil, fmt.Errorf("no deployments found in namespace %s", namespace)
+	}
+	return &list.Items[0], nil
+}
+
+// getCreatedService lists Services in the given namespace and returns the first one.
+// Use this after s.Create() because GenerateName means the fake client won't assign a fixed name.
+func getCreatedService(client kubernetes.Interface, namespace string) (*corev1.Service, error) {
+	list, err := client.CoreV1().Services(namespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if len(list.Items) == 0 {
+		return nil, fmt.Errorf("no services found in namespace %s", namespace)
+	}
+	return &list.Items[0], nil
 }
 
 // --- Service helpers with functional options ---
