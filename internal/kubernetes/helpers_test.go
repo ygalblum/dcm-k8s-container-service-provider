@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-// Compile-time assertion: K8sContainerStore implements ContainerRepository (TC-U024).
+// Compile-time assertion: K8sContainerStore implements ContainerRepository (TC-U024, TC-U089).
 var _ store.ContainerRepository = (*k8sstore.K8sContainerStore)(nil)
 
 // newTestStore creates a K8sContainerStore backed by a fake clientset.

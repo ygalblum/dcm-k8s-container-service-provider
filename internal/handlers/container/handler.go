@@ -105,10 +105,19 @@ func (h *Handler) ListContainers(ctx context.Context, req oapigen.ListContainers
 }
 
 // GetHealth returns the service health status including uptime and version.
-func (h *Handler) GetHealth(_ context.Context, _ oapigen.GetHealthRequestObject) (oapigen.GetHealthResponseObject, error) {
+// It checks the backing K8s cluster liveness and returns "unhealthy" if
+// the cluster is unreachable.
+func (h *Handler) GetHealth(ctx context.Context, _ oapigen.GetHealthRequestObject) (oapigen.GetHealthResponseObject, error) {
+	status := "healthy"
+	if h.store != nil {
+		if err := h.store.CheckHealth(ctx); err != nil {
+			status = "unhealthy"
+		}
+	}
+
 	uptime := max(0, int(time.Since(h.startTime).Seconds()))
 	return oapigen.GetHealth200JSONResponse{
-		Status:  "healthy",
+		Status:  status,
 		Type:    util.Ptr("k8s-container-service-provider.dcm.io/health"),
 		Path:    util.Ptr("health"),
 		Uptime:  &uptime,

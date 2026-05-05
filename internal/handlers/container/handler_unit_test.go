@@ -32,12 +32,13 @@ var _ = Describe("Container API Handlers", func() {
 	// GetHealth
 	// -----------------------------------------------------------------------
 	Describe("GetHealth", func() {
-		// TC-U005: Returns 200 OK with correct body
-		// Validates: REQ-HLT-010, REQ-HLT-020
+		// TC-U005: Returns 200 OK with correct body when healthy
+		// Validates: REQ-HLT-010, REQ-HLT-020, REQ-HLT-050
 		// Transitively covers: TC-U007 (REQ-HLT-040 — GetHealth uses only
-		// startTime and version, never touches the store or K8s API)
-		It("returns 200 with correct response fields (TC-U005)", func() {
-			h := container.NewHandler(nil, slog.New(slog.NewJSONHandler(io.Discard, nil)), time.Now(), "2.3.4")
+		// startTime, version, and healthChecker, never touches the store)
+		It("returns 200 with correct response fields when healthy (TC-U005)", func() {
+			repo := &mockContainerRepository{CheckHealthFunc: func(_ context.Context) error { return nil }}
+			h := container.NewHandler(repo, slog.New(slog.NewJSONHandler(io.Discard, nil)), time.Now(), "2.3.4")
 
 			resp, err := h.GetHealth(context.Background(), oapigen.GetHealthRequestObject{})
 			Expect(err).NotTo(HaveOccurred())
@@ -60,7 +61,8 @@ var _ = Describe("Container API Handlers", func() {
 		// Validates: REQ-HLT-020
 		It("reports uptime increasing over time (TC-U006)", func() {
 			startTime := time.Now().Add(-60 * time.Second)
-			h := container.NewHandler(nil, slog.New(slog.NewJSONHandler(io.Discard, nil)), startTime, "1.0.0")
+			repo := &mockContainerRepository{CheckHealthFunc: func(_ context.Context) error { return nil }}
+			h := container.NewHandler(repo, slog.New(slog.NewJSONHandler(io.Discard, nil)), startTime, "1.0.0")
 
 			resp, err := h.GetHealth(context.Background(), oapigen.GetHealthRequestObject{})
 			Expect(err).NotTo(HaveOccurred())
@@ -70,6 +72,44 @@ var _ = Describe("Container API Handlers", func() {
 
 			Expect(okResp.Uptime).NotTo(BeNil())
 			Expect(*okResp.Uptime).To(BeNumerically(">=", 60))
+		})
+
+		// TC-U087: GetHealth returns "unhealthy" when HealthChecker fails
+		// Validates: REQ-HLT-020, REQ-HLT-060
+		It("returns unhealthy when health check fails (TC-U087)", func() {
+			repo := &mockContainerRepository{CheckHealthFunc: func(_ context.Context) error { return errors.New("connection refused") }}
+			h := container.NewHandler(repo, slog.New(slog.NewJSONHandler(io.Discard, nil)), time.Now(), "1.0.0")
+
+			resp, err := h.GetHealth(context.Background(), oapigen.GetHealthRequestObject{})
+			Expect(err).NotTo(HaveOccurred())
+
+			okResp, ok := resp.(oapigen.GetHealth200JSONResponse)
+			Expect(ok).To(BeTrue(), "expected GetHealth200JSONResponse")
+
+			Expect(okResp.Status).To(Equal("unhealthy"))
+		})
+
+		// TC-U088: GetHealth returns all fields when unhealthy
+		// Validates: REQ-HLT-060
+		It("returns all fields when unhealthy (TC-U088)", func() {
+			repo := &mockContainerRepository{CheckHealthFunc: func(_ context.Context) error { return errors.New("connection refused") }}
+			h := container.NewHandler(repo, slog.New(slog.NewJSONHandler(io.Discard, nil)), time.Now(), "2.3.4")
+
+			resp, err := h.GetHealth(context.Background(), oapigen.GetHealthRequestObject{})
+			Expect(err).NotTo(HaveOccurred())
+
+			okResp, ok := resp.(oapigen.GetHealth200JSONResponse)
+			Expect(ok).To(BeTrue(), "expected GetHealth200JSONResponse")
+
+			Expect(okResp.Status).To(Equal("unhealthy"))
+			Expect(okResp.Type).NotTo(BeNil())
+			Expect(*okResp.Type).To(Equal("k8s-container-service-provider.dcm.io/health"))
+			Expect(okResp.Path).NotTo(BeNil())
+			Expect(*okResp.Path).To(Equal("health"))
+			Expect(okResp.Version).NotTo(BeNil())
+			Expect(*okResp.Version).To(Equal("2.3.4"))
+			Expect(okResp.Uptime).NotTo(BeNil())
+			Expect(*okResp.Uptime).To(BeNumerically(">=", 0))
 		})
 	})
 

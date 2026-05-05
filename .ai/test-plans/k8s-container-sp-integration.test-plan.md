@@ -185,6 +185,16 @@ for full descriptions.
 - **When:** `GET /api/v1alpha1/containers/health` is called
 - **Then:** The response MUST be HTTP 200 with a valid Health JSON body containing `status`, `type`, `path`, `version`, and `uptime` fields
 
+### TC-I118: Health endpoint returns "unhealthy" when K8s is unreachable
+
+- **Requirement:** REQ-HLT-060
+- **AC:** AC-HLT-025
+- **Priority:** High
+- **Type:** Integration
+- **Given:** The server is running with a `ContainerRepository` whose `CheckHealth` returns an error (simulating K8s unavailability)
+- **When:** `GET /api/v1alpha1/containers/health` is called
+- **Then:** The response MUST be HTTP 200 AND `status` is `"unhealthy"` AND all other fields (`type`, `path`, `version`, `uptime`) are still present
+
 ### TC-I104: Panic recovery returns RFC 7807 JSON
 
 - **Requirement:** REQ-HTTP-070
@@ -746,6 +756,33 @@ for full descriptions.
 
 ---
 
+## 7.1 · K8s Store — Health Check
+
+> **Suggested Ginkgo structure:** `Describe("K8s Store")` → `Describe("CheckHealth")`
+
+### TC-I116: CheckHealth succeeds with reachable fake client
+
+- **Requirement:** REQ-HLT-050
+- **AC:** AC-HLT-020
+- **Priority:** High
+- **Type:** Integration
+- **Transitively covers:** TC-U089 (CheckHealth is part of ContainerRepository satisfied by K8sContainerStore — `var _ store.ContainerRepository = (*K8sContainerStore)(nil)` in test file)
+- **Given:** A K8sContainerStore initialized with a fake K8s client
+- **When:** `CheckHealth` is called
+- **Then:** No error is returned
+
+### TC-I117: CheckHealth returns error when Discovery fails
+
+- **Requirement:** REQ-HLT-050, REQ-HLT-060
+- **AC:** AC-HLT-025
+- **Priority:** High
+- **Type:** Integration
+- **Given:** A K8sContainerStore initialized with a fake K8s client configured to return an error on Discovery
+- **When:** `CheckHealth` is called
+- **Then:** An error is returned
+
+---
+
 ## 8 · Monitoring — Informer Setup
 
 > **Suggested Ginkgo structure:** `Describe("Status Monitor")` → `Describe("Informer Setup")`
@@ -1194,6 +1231,8 @@ for full descriptions.
 | REQ-HTTP-090   | TC-I008                             | Covered |
 | REQ-HTTP-110   | TC-I098                             | Covered |
 | REQ-HLT-010    | TC-I103                             | Covered |
+| REQ-HLT-050    | TC-I116, TC-I117                    | Covered |
+| REQ-HLT-060    | TC-I117, TC-I118                    | Covered |
 | REQ-API-070    | TC-I075, TC-I076                    | Covered |
 | REQ-API-151    | TC-I037                             | Covered |
 | REQ-API-180    | TC-I081                             | Covered |
@@ -1270,8 +1309,8 @@ for full descriptions.
 | REQ-XC-LOG-010 | TC-I006, TC-I007                    | Covered |
 | REQ-XC-LOG-020 | TC-I006, TC-I007 (INFO), TC-I057 (ERROR) | Covered |
 
-**Total:** 96 integration test cases (including 2 E2E placeholders, 3 pending
-monitoring implementation) covering 77 requirements at integration level.
+**Total:** 99 integration test cases (including 2 E2E placeholders, 3 pending
+monitoring implementation) covering 79 requirements at integration level.
 
 > Requirements not listed above (REQ-HTTP-050–070, REQ-HLT-010–040,
 > REQ-API-010–060, REQ-API-080–160, REQ-API-170, REQ-STR-010, REQ-MON-090,
@@ -1306,6 +1345,7 @@ by integration tests in this plan:
 | TC-U049 | DCM label collision rejected | TC-I071 |
 | TC-U057 | max_page_size boundary enforcement | TC-I008 |
 | TC-U058 | Invalid containerId parameter | TC-I008 |
+| TC-U089 | CheckHealth in ContainerRepository satisfied by K8sContainerStore | TC-I116 |
 
 ---
 

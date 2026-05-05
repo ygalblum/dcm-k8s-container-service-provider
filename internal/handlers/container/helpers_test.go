@@ -30,10 +30,11 @@ var _ store.ContainerRepository = (*mockContainerRepository)(nil)
 // Each method delegates to a configurable function field. Unconfigured methods
 // panic so that unexpected calls are immediately visible.
 type mockContainerRepository struct {
-	CreateFunc func(ctx context.Context, spec v1alpha1.ContainerSpec, id string) (*v1alpha1.Container, error)
-	GetFunc    func(ctx context.Context, containerID string) (*v1alpha1.Container, error)
-	ListFunc   func(ctx context.Context, maxPageSize int32, pageToken string) (*v1alpha1.ContainerList, error)
-	DeleteFunc func(ctx context.Context, containerID string) error
+	CreateFunc      func(ctx context.Context, spec v1alpha1.ContainerSpec, id string) (*v1alpha1.Container, error)
+	GetFunc         func(ctx context.Context, containerID string) (*v1alpha1.Container, error)
+	ListFunc        func(ctx context.Context, maxPageSize int32, pageToken string) (*v1alpha1.ContainerList, error)
+	DeleteFunc      func(ctx context.Context, containerID string) error
+	CheckHealthFunc func(ctx context.Context) error
 }
 
 func (m *mockContainerRepository) Create(ctx context.Context, spec v1alpha1.ContainerSpec, id string) (*v1alpha1.Container, error) {
@@ -62,6 +63,13 @@ func (m *mockContainerRepository) Delete(ctx context.Context, containerID string
 		panic("unexpected call to Delete")
 	}
 	return m.DeleteFunc(ctx, containerID)
+}
+
+func (m *mockContainerRepository) CheckHealth(ctx context.Context) error {
+	if m.CheckHealthFunc == nil {
+		return nil
+	}
+	return m.CheckHealthFunc(ctx)
 }
 
 // ---------------------------------------------------------------------------

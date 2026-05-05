@@ -234,19 +234,25 @@ None - independently deliverable.
 
 Implementation of the `/health` endpoint as defined in the OpenAPI spec. This
 endpoint is polled by the DCM control plane every 10 seconds to determine SP
-liveness.
+liveness and backing provider health. The endpoint checks Kubernetes API server
+reachability and reports `status: "healthy"` or `status: "unhealthy"` per the
+DCM three-state health model
+([enhancements#47](https://github.com/dcm-project/enhancements/pull/47)).
 
-Out of scope: deep health checks (K8s connectivity, NATS connectivity),
-readiness vs liveness distinction (future enhancement).
+Out of scope: NATS connectivity checks, readiness vs liveness distinction
+(future enhancement).
 
 #### Requirements
 
 | ID | Requirement | Priority | Notes |
 |----|-------------|----------|-------|
 | REQ-HLT-010 | The SP MUST expose `GET /api/v1alpha1/containers/health` and return HTTP 200 OK. The SPRM constructs health URLs as `{registered_endpoint}/health`, so the health endpoint MUST be at the resource-relative path | MUST | |
-| REQ-HLT-020 | The health response MUST return a JSON body conforming to the Health schema with `status`, `type`, `path`, `version`, and `uptime` fields | MUST | DD-070 |
+| REQ-HLT-020 | The health response MUST return a JSON body conforming to the Health schema with `status`, `type`, `path`, `version`, and `uptime` fields. The `status` field MUST be `"healthy"` when the backing K8s cluster is reachable, or `"unhealthy"` when it is not | MUST | DD-070 |
 | REQ-HLT-030 | The response MUST set `Content-Type: application/json` | MUST | |
-| REQ-HLT-040 | The health endpoint MUST be lightweight and return quickly, suitable for 10-second polling intervals (no K8s API calls, no DB queries) | MUST | |
+| REQ-HLT-040 | The health endpoint MUST be lightweight and return quickly, suitable for 10-second polling intervals. The only external call permitted is a Kubernetes API server version discovery request | MUST | |
+| REQ-HLT-050 | The health endpoint MUST check backing K8s cluster liveness by calling the Kubernetes API server's version discovery endpoint | MUST | DD-070 |
+| REQ-HLT-060 | When the K8s cluster is unreachable or the discovery call fails, the health endpoint MUST return HTTP 200 with `status: "unhealthy"`. All other response fields (`type`, `path`, `version`, `uptime`) MUST still be populated | MUST | DD-070 |
+| REQ-HLT-070 | The `CheckHealth` method MUST be part of the `ContainerRepository` interface so that the store implementation is the single source of backing-infrastructure interaction | MUST | DD-040 |
 
 #### Acceptance Criteria
 
@@ -257,13 +263,26 @@ readiness vs liveness distinction (future enhancement).
 - **When** a GET request is made to `/api/v1alpha1/containers/health`
 - **Then** the SP MUST return HTTP 200 OK
 
-##### AC-HLT-020: Health response body
+##### AC-HLT-020: Health response body — healthy
 
-- **Validates:** REQ-HLT-020
-- **Given** the SP is healthy
+- **Validates:** REQ-HLT-020, REQ-HLT-050
+- **Given** the SP is running and the backing K8s cluster is reachable
 - **When** GET `/api/v1alpha1/containers/health` is called
 - **Then** the response body MUST contain:
   - `status`: `"healthy"`
+  - `type`: `"k8s-container-service-provider.dcm.io/health"`
+  - `path`: `"health"`
+  - `version`: SP build version (string)
+  - `uptime`: seconds since SP started (integer)
+
+##### AC-HLT-025: Health response body — unhealthy
+
+- **Validates:** REQ-HLT-020, REQ-HLT-060
+- **Given** the SP is running but the backing K8s cluster is unreachable
+- **When** GET `/api/v1alpha1/containers/health` is called
+- **Then** the response MUST be HTTP 200 OK
+- **And** the response body MUST contain:
+  - `status`: `"unhealthy"`
   - `type`: `"k8s-container-service-provider.dcm.io/health"`
   - `path`: `"health"`
   - `version`: SP build version (string)
@@ -281,7 +300,7 @@ readiness vs liveness distinction (future enhancement).
 - **Validates:** REQ-HLT-040
 - **Given** the DCM control plane polls the health endpoint
 - **When** the request is processed
-- **Then** the handler MUST NOT perform expensive operations (no K8s API calls, no DB queries)
+- **Then** the handler MUST only perform a Kubernetes API server version discovery call (no resource listing, no DB queries)
 
 ##### AC-HLT-050: Reserved "health" container ID
 
@@ -1626,16 +1645,20 @@ can discover it.
 
 **Related requirements:** REQ-K8S-010, REQ-K8S-100, REQ-K8S-220, REQ-XC-ID-010
 
-### DD-070: Health response schema
+### DD-070: Health response schema and three-state model
 
-**Decision:** Health response uses `status: "healthy"` with AEP fields (`type`,
-`path`) plus operational fields (`version`, `uptime`).
+**Decision:** Health response uses `status: "healthy"` or `status: "unhealthy"`
+with AEP fields (`type`, `path`) plus operational fields (`version`, `uptime`).
+The SP checks backing K8s cluster liveness via the API server's version
+discovery endpoint (`client.Discovery().ServerVersion()`).
 
-**Rationale:** Diverges from the SP Health Check enhancement (`status: "pass"`,
-no AEP fields). Aligns with the DCM Service Provider API (`status: "healthy"`).
-Note ecosystem inconsistency (KubeVirt SP uses `"ok"`).
+**Rationale:** Aligns with the DCM three-state health model
+([enhancements#47](https://github.com/dcm-project/enhancements/pull/47)):
+`healthy` → DCM marks provider Ready; `unhealthy` → DCM marks provider
+Unhealthy; non-200/timeout → DCM marks provider Unavailable after threshold.
+Server version discovery is the lightest possible K8s API call.
 
-**Related requirements:** REQ-HLT-020
+**Related requirements:** REQ-HLT-020, REQ-HLT-050, REQ-HLT-060
 
 ### DD-080: Service creation driven by port visibility
 
@@ -1745,7 +1768,7 @@ conditions (unless ReplicaFailure=True or Replicas=0, which map to FAILED).
 | Prefix | Topic | Count |
 |--------|-------|-------|
 | REQ-HTTP-NNN | 4.1: HTTP Server | 11 |
-| REQ-HLT-NNN | 4.2: Health Service | 4 |
+| REQ-HLT-NNN | 4.2: Health Service | 7 |
 | REQ-API-NNN | 4.3: Container API Handlers | 21 |
 | REQ-STR-NNN | 4.4: Store Interface | 8 |
 | REQ-K8S-NNN | 4.4: Kubernetes Integration | 29 |
@@ -1756,4 +1779,4 @@ conditions (unless ReplicaFailure=True or Replicas=0, which map to FAILED).
 | REQ-XC-ERR-NNN | 5.3: Error Handling | 4 |
 | REQ-XC-LOG-NNN | 5.4: Logging | 2 |
 | REQ-XC-CFG-NNN | 5.5: Configuration Management | 2 |
-| **Total** | | **114** |
+| **Total** | | **117** |

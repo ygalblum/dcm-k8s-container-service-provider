@@ -3,6 +3,7 @@ package apiserver_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -94,10 +95,11 @@ func (b *blockingListHandler) ListContainers(_ http.ResponseWriter, r *http.Requ
 // mockContainerRepo implements store.ContainerRepository for integration tests.
 // Only wire the methods your test needs; unconfigured methods panic.
 type mockContainerRepo struct {
-	CreateFunc func(ctx context.Context, spec v1alpha1.ContainerSpec, id string) (*v1alpha1.Container, error)
-	GetFunc    func(ctx context.Context, containerID string) (*v1alpha1.Container, error)
-	ListFunc   func(ctx context.Context, maxPageSize int32, pageToken string) (*v1alpha1.ContainerList, error)
-	DeleteFunc func(ctx context.Context, containerID string) error
+	CreateFunc      func(ctx context.Context, spec v1alpha1.ContainerSpec, id string) (*v1alpha1.Container, error)
+	GetFunc         func(ctx context.Context, containerID string) (*v1alpha1.Container, error)
+	ListFunc        func(ctx context.Context, maxPageSize int32, pageToken string) (*v1alpha1.ContainerList, error)
+	DeleteFunc      func(ctx context.Context, containerID string) error
+	CheckHealthFunc func() error
 }
 
 func (m *mockContainerRepo) Create(ctx context.Context, spec v1alpha1.ContainerSpec, id string) (*v1alpha1.Container, error) {
@@ -126,6 +128,13 @@ func (m *mockContainerRepo) Delete(ctx context.Context, containerID string) erro
 		panic("unexpected call to Delete")
 	}
 	return m.DeleteFunc(ctx, containerID)
+}
+
+func (m *mockContainerRepo) CheckHealth(_ context.Context) error {
+	if m.CheckHealthFunc == nil {
+		return nil
+	}
+	return m.CheckHealthFunc()
 }
 
 var _ = Describe("HTTP Server", func() {
@@ -875,6 +884,35 @@ var _ = Describe("HTTP Server", func() {
 		var healthJSON map[string]any
 		Expect(json.Unmarshal(body, &healthJSON)).To(Succeed())
 		Expect(healthJSON).To(HaveKey("status"))
+		Expect(healthJSON).To(HaveKey("type"))
+		Expect(healthJSON).To(HaveKey("path"))
+		Expect(healthJSON).To(HaveKey("version"))
+		Expect(healthJSON).To(HaveKey("uptime"))
+	})
+
+	// TC-I118: Health endpoint returns "unhealthy" when K8s is unreachable
+	// Validates: REQ-HLT-060 / AC-HLT-025
+	It("returns unhealthy status when health check fails (TC-I118)", func() {
+		repo := &mockContainerRepo{
+			CheckHealthFunc: func() error { return errors.New("kubernetes unreachable") },
+		}
+		addr, cancel, errCh := startServerWithRepo(defaultConfig(), nil, nil, repo)
+		defer func() {
+			cancel()
+			Eventually(errCh).WithTimeout(10 * time.Second).Should(Receive())
+		}()
+
+		resp, err := http.Get(fmt.Sprintf("http://%s/api/v1alpha1/containers/health", addr))
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { _ = resp.Body.Close() }()
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+		body, err := io.ReadAll(resp.Body)
+		Expect(err).NotTo(HaveOccurred())
+
+		var healthJSON map[string]any
+		Expect(json.Unmarshal(body, &healthJSON)).To(Succeed())
+		Expect(healthJSON["status"]).To(Equal("unhealthy"))
 		Expect(healthJSON).To(HaveKey("type"))
 		Expect(healthJSON).To(HaveKey("path"))
 		Expect(healthJSON).To(HaveKey("version"))

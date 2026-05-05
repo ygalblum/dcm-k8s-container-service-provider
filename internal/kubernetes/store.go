@@ -31,6 +31,17 @@ func NewK8sContainerStore(client kubernetes.Interface, cfg K8sConfig, logger *sl
 	}
 }
 
+// CheckHealth verifies the backing Kubernetes cluster is reachable by calling
+// the API server's version discovery endpoint.
+func (s *K8sContainerStore) CheckHealth(_ context.Context) error {
+	_, err := s.client.Discovery().ServerVersion()
+	if err != nil {
+		s.logger.Warn("kubernetes health check failed", "error", err)
+		return err
+	}
+	return nil
+}
+
 // findDeployment looks up the single Deployment for a container instance.
 func (s *K8sContainerStore) findDeployment(ctx context.Context, containerID string) (*appsv1.Deployment, error) {
 	deploys, err := s.client.AppsV1().Deployments(s.cfg.Namespace).List(ctx, metav1.ListOptions{

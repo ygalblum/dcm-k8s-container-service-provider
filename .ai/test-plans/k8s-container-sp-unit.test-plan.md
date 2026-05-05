@@ -62,13 +62,13 @@ construction, debounce, indexer functions, registration payload builders) are
 > nested `Describe` per operation and `Context` per scenario. All tests use a
 > mocked `ContainerRepository`.
 
-### TC-U005: Returns 200 with correct response fields
+### TC-U005: Returns 200 with correct response fields when healthy
 
-- **Requirement:** REQ-HLT-010, REQ-HLT-020
+- **Requirement:** REQ-HLT-010, REQ-HLT-020, REQ-HLT-050
 - **Priority:** High
 - **Type:** Unit
-- **Transitively covers:** TC-U007 (GetHealth uses only `startTime` and `version` — never touches the store or K8s API; REQ-HLT-040 satisfied)
-- **Given:** A `Handler` is initialized with a known start time, version `"2.3.4"`, and a `nil` repository
+- **Transitively covers:** TC-U007 (GetHealth uses only `startTime`, `version`, and `store.CheckHealth` — never touches CRUD methods; REQ-HLT-040 satisfied)
+- **Given:** A `Handler` is initialized with a known start time, version `"2.3.4"`, and a mock `ContainerRepository` whose `CheckHealth` returns `nil`
 - **When:** `GetHealth` is called on the `StrictServerInterface`
 - **Then:**
   - Response is `GetHealth200JSONResponse`
@@ -83,9 +83,43 @@ construction, debounce, indexer functions, registration payload builders) are
 - **Requirement:** REQ-HLT-020
 - **Priority:** Medium
 - **Type:** Unit
-- **Given:** A `Handler` was initialized with a start time 60 seconds in the past and a `nil` repository
+- **Given:** A `Handler` was initialized with a start time 60 seconds in the past and a mock `ContainerRepository` whose `CheckHealth` returns `nil`
 - **When:** `GetHealth` is called on the `StrictServerInterface`
 - **Then:** `uptime` is `>= 60`
+
+### TC-U087: GetHealth returns "unhealthy" when health check fails
+
+- **Requirement:** REQ-HLT-020, REQ-HLT-060
+- **Priority:** High
+- **Type:** Unit
+- **Given:** A `Handler` is initialized with a mock `ContainerRepository` whose `CheckHealth` returns an error
+- **When:** `GetHealth` is called on the `StrictServerInterface`
+- **Then:**
+  - Response is `GetHealth200JSONResponse`
+  - `status` is `"unhealthy"`
+
+### TC-U088: GetHealth returns all fields when unhealthy
+
+- **Requirement:** REQ-HLT-060
+- **Priority:** High
+- **Type:** Unit
+- **Given:** A `Handler` is initialized with version `"2.3.4"` and a mock `ContainerRepository` whose `CheckHealth` returns an error
+- **When:** `GetHealth` is called on the `StrictServerInterface`
+- **Then:**
+  - `status` is `"unhealthy"`
+  - `type` is `"k8s-container-service-provider.dcm.io/health"`
+  - `path` is `"health"`
+  - `version` is `"2.3.4"`
+  - `uptime` is an integer `>= 0`
+
+### TC-U089: CheckHealth is part of ContainerRepository satisfied by K8sContainerStore
+
+- **Requirement:** REQ-HLT-070
+- **Priority:** High
+- **Type:** Unit (compile-time assertion)
+- **Given:** The `ContainerRepository` interface includes `CheckHealth(ctx context.Context) error`
+- **When:** A compile-time type assertion of `K8sContainerStore` to `ContainerRepository` is performed
+- **Then:** The assertion compiles and succeeds (covered by existing TC-U024 assertion)
 
 ### TC-U009: CreateContainer returns 201 with populated read-only fields
 
@@ -554,15 +588,15 @@ dedicated test class or `Describe` block.
 
 ### Structural Contracts
 
-#### TC-U007: GetHealth has no external dependencies at runtime
+#### TC-U007: GetHealth only uses health check, not CRUD methods
 
 - **Requirement:** REQ-HLT-040
 - **Priority:** Medium
 - **Type:** Unit (structural)
-- **Given:** The `Handler` struct (which includes a `store` field for container CRUD)
+- **Given:** The `Handler` struct (which includes a `store` field for container CRUD and health checking)
 - **When:** `GetHealth` is inspected
-- **Then:** It uses only `startTime` and `version` — it never accesses the store, K8s client, or any external dependency. The handler is constructed with a `nil` repository in health tests, confirming no store interaction.
-- **Referenced by:** TC-U005 (handler constructed with nil repo; GetHealth succeeds)
+- **Then:** It uses only `startTime`, `version`, and `store.CheckHealth` — it never accesses CRUD methods (Create, Get, List, Delete) or any other external dependency.
+- **Referenced by:** TC-U005 (handler constructed with mock repo; GetHealth succeeds without CRUD methods configured)
 
 #### TC-U008: Handler implements StrictServerInterface
 
@@ -981,9 +1015,12 @@ dedicated test class or `Describe` block.
 | REQ-HTTP-090  | TC-U057 (via TC-I008), TC-U058 (via TC-I008), TC-U067 (via TC-U014), TC-U073–TC-U077 | Covered |
 | REQ-HTTP-091  | TC-U070                           | Covered |
 | REQ-HLT-010   | TC-U005, TC-U078                  | Covered |
-| REQ-HLT-020   | TC-U005, TC-U006                  | Covered |
+| REQ-HLT-020   | TC-U005, TC-U006, TC-U087, TC-U088 | Covered |
 | REQ-HLT-030   | TC-U005 (transitively via generated `VisitGetHealthResponse` + TC-I001/I002) | Covered |
 | REQ-HLT-040   | TC-U007 (via TC-U005)             | Covered |
+| REQ-HLT-050   | TC-U005, TC-U089 (via TC-I116)    | Covered |
+| REQ-HLT-060   | TC-U087, TC-U088                  | Covered |
+| REQ-HLT-070   | TC-U089                           | Covered |
 | REQ-API-010   | TC-U008 (via TC-U009)             | Covered |
 | REQ-API-020   | TC-U009                           | Covered |
 | REQ-API-030   | TC-U010                           | Covered |
@@ -1034,7 +1071,7 @@ dedicated test class or `Describe` block.
 | REQ-MON-131   | TC-U079                           | Covered |
 | REQ-MON-170   | TC-U072, TC-U079                  | Covered |
 
-**Total:** 73 test case IDs (2 retired: TC-U065, TC-U066) — 42 in behavioural
+**Total:** 76 test case IDs (2 retired: TC-U065, TC-U066) — 45 in behavioural
 test classes, 31 in the utility index (tested transitively through higher-level
 behavioural and integration tests).
 
